@@ -680,6 +680,7 @@ def delineate_basins(
     preserve_gauges: bool = True,
     output_dir: Path = None,
     save_plots: bool = False,
+    overwrite: bool = False,
 ) -> Dict[str, DelineationResult]:
     """
     Main function to delineate watersheds.
@@ -698,10 +699,13 @@ def delineate_basins(
     if output_dir is None:
         output_dir = (gauges_path.parent / gauges_path.stem).resolve()
 
-    processed_outlets = [
-        f.stem.split('_gauges')[0] 
-        for f in (output_dir / 'gauges').glob('*.parquet')
-    ]
+    if overwrite:
+        processed_outlets = []
+    else:
+        processed_outlets = [
+            f.stem.split('_gauges')[0] 
+            for f in (output_dir / 'gauges').glob('*.parquet')
+        ]
 
     print("\n" + "=" * 80)
     print("GRAPH-BASED WATERSHED DELINEATION")
@@ -711,6 +715,7 @@ def delineate_basins(
     all_gauges = load_gauges(gauges_path)
     all_gauges = all_gauges[~all_gauges['outlet_id'].isin(processed_outlets)]
     pfaf1_outlets = get_pfaf1_outlet_dict(all_gauges)
+    results = {}
 
     for pfaf1_id, outlet_dict in pfaf1_outlets.items():
         # Load basin data
@@ -752,10 +757,20 @@ def delineate_basins(
             # Store result
             result = DelineationResult(graph=G, outlet_id=outlet_id)
             save_result(outlet_id, result, output_dir, save_plots)
+            results[outlet_id] = result
 
     print(f"\n{'=' * 80}")
+    print("DELINEATION SUMMARY")
+    for outlet_id, result in results.items():
+        G = result.graph
+        # Count explicit gauges (is_gauge=True)
+        n_gauges = sum(1 for n, d in G.nodes(data=True) if d.get("is_gauge", False))
+        n_other = len(G.nodes) - n_gauges
+        print(f"  Outlet {outlet_id}: {n_gauges} Gauges, {n_other} Catchment Nodes")
     print("COMPLETE")
     print(f"{'=' * 80}")
+
+    return results
 
 
 def set_gauge_area_range(gauges, rivers):

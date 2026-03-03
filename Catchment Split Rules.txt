@@ -1,0 +1,3 @@
+1. Split catchment to a new catchment at a gage or reservoir node. in these cases, the downstream basin should be catagorized as "split_downstream" and take up the full 
+    pre-split downstream merit basin.
+2. if the basins are to small, but not a reservoir or gage basin, combine into a basin up to the given idal catchment size. 
