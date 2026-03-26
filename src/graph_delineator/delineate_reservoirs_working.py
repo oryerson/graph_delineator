@@ -608,11 +608,17 @@ def insert_reservoirs(
         # Find all upstream nodes reachable from target via reversed edges
         # (i.e., nodes that drain INTO the target).
         upstream_of_target = nx.ancestors(G, target)
+        
+        # Consider both intersecting nodes and upstream nodes
+        candidates = set(intersecting) | set(upstream_of_target)
 
-        for node in list(upstream_of_target):
+        for node in list(candidates):
             if node not in G:
                 continue
             if node == target:
+                continue
+            # IMPORTANT: never merge outlet_node if it was split and holds the downstream remainder!
+            if node == outlet_node and target != outlet_node:
                 continue
             # Never merge gauge nodes
             if G.nodes[node].get("is_gauge", False):
@@ -623,10 +629,11 @@ def insert_reservoirs(
             # (a) Spatial overlap with reservoir polygon
             node_poly = G.nodes[node].get("polygon")
             overlaps_reservoir = node_poly is not None and node_poly.intersects(res_poly)
-            # (b) Same original COMID as the reservoir node
+            # (b) Same original COMID as the reservoir node (and is an upstream neighbor)
             same_comid = (
                 target_comid is not None
                 and G.nodes[node].get("original_comid") == target_comid
+                and node in upstream_of_target
             )
             if not (overlaps_reservoir or same_comid):
                 continue
@@ -740,9 +747,12 @@ def merge_nodes(G: nx.DiGraph, source: str, target: str, reason: str) -> dict:
 
     # --- Rewire edges ---
     for pred in list(G.predecessors(source)):
-        if pred != target: G.add_edge(pred, target)
+        if pred != target and not nx.has_path(G, target, pred):
+            G.add_edge(pred, target)
+            
     for succ in list(G.successors(source)):
-        if succ != target: G.add_edge(target, succ)
+        if succ != target and not nx.has_path(G, succ, target):
+            G.add_edge(target, succ)
 
     G.remove_node(source)
 
